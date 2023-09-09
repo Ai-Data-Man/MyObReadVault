@@ -1,0 +1,82 @@
+---
+{"Aliases":["#ElasticSearch/Primary/Shard/Node"],"dg-publish":true,"permalink":"/Logseq元知识库/pages/ElasticSearch.Primary.Shard.Node/","dgPassFrontmatter":true}
+---
+
+>
+
+``` dataviewjs
+let textAndBlockObjMap = {}
+
+function map2BlockObj(block) {
+	if (textAndBlockObjMap[block.text]) {
+		return textAndBlockObjMap[block.text]
+	}
+	let blockObj = {
+		"text": block.text,
+		"children": new Set()
+	}
+	textAndBlockObjMap[block.text] = blockObj
+	return blockObj
+}
+
+function iter(block, level) {
+	let blockObj = map2BlockObj(block)
+	if (!blockObj["symbol"]) {
+		blockObj["level"] = level
+		if (level != 0) {
+			blockObj["text"] = blockObj["text"] + " --add by " + block.link
+		} 
+		blockObj.symbol = "▬ ".repeat(level)
+	}
+	if ((block.text.startsWith("[[？") && block.text.endsWith("]]"))
+		|| block.text && level > 0) {
+		return
+	}
+	let childBlocks = block.children
+	for (let childBlock of childBlocks) {
+		let childBlockObj = map2BlockObj(childBlock)
+		blockObj.children.add(childBlockObj)
+		iter(childBlock, level + 1)
+	}
+}
+
+function rep(blockObj) {
+	dv.paragraph(blockObj["symbol"] + blockObj["text"])
+	let childBlockObjs = blockObj["children"]
+	for (let childBlockObj of childBlockObjs) {
+		rep(childBlockObj)
+	}
+}
+
+let curPage = dv.current()
+let tags = curPage.file.aliases.array()
+let tagQry = tags.join(" or ")
+let qryPages = dv.pages(tagQry)
+
+
+for (let qryPage of qryPages) {
+	let blocks = qryPage.file.lists
+	for(let block of blocks) {
+		let blockText = block.text
+		for(let tag of tags) {
+			if(tag == blockText) {
+				iter(block, 0)
+				break;
+			}
+		}
+
+	}
+}
+
+
+for (let k of Object.keys(textAndBlockObjMap).sort()) {
+	o = textAndBlockObjMap[k]
+	if (o["level"] == 0) {
+		rep(o)
+	}
+
+}
+
+
+```		
+>
