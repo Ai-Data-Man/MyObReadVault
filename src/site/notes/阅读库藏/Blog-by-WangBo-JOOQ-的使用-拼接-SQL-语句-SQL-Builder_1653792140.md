@@ -1,0 +1,1071 @@
+---
+{"title":"Blog by WangBo - JOOQ 的使用 - 拼接 SQL 语句 (SQL Builder)","url":"https://www.wangbo.im/posts/jooq-usecases-sql-builder/","clipped_at":"2022-05-29 10:42:20","tags":["无"],"dg-publish":true,"permalink":"/阅读库藏/Blog-by-WangBo-JOOQ-的使用-拼接-SQL-语句-SQL-Builder_1653792140/","dgPassFrontmatter":true}
+---
+
+
+# Blog by WangBo - JOOQ 的使用 - 拼接 SQL 语句 (SQL Builder)
+
+[WB Prime](https://www.wangbo.im/)
+
+*   [Categories](https://www.wangbo.im/categories)
+*   [Tags](https://www.wangbo.im/tags)
+*   [Github](https://github.wangbo.im/)
+*   [About](https://www.wangbo.im/about)
+
+# [JOOQ 的使用 - 拼接 SQL 语句 (SQL Builder)](https://www.wangbo.im/posts/jooq-usecases-sql-builder/)
+
+2019-10-17
+
+[jOOQ](https://www.jooq.org/ "jOOQ generates Java code from your database and lets you build type safe SQL queries through its fluent API.") 是基于 JDBC 之上的一个抽象层，提供了多种多样的模型来与关系型数据库进行互操作；其使用与 [mybatis](https://mybatis.org/mybatis-3/) 和 [Hibernate ORM](http://hibernate.org/orm/) 不同的思路来实现 [对象关系映射 ORM](https://en.wikipedia.org/wiki/Object-relational_mapping) 。
+
+本篇主要介绍基于 [jOOQ](https://www.jooq.org/ "jOOQ generates Java code from your database and lets you build type safe SQL queries through its fluent API.") 的 SQL 语句拼接 (SQL Builder) 。
+
+不同的关系型数据库提供方对 SQL 的支持程度不完全一致，形成了不同的 SQL 方言。不同的 SQL 方言在语法的细节、支持的数据类型等方面存在差别；想要手写可移植的 SQL 简直是难于上青天。
+
+[jOOQ](https://www.jooq.org/ "jOOQ generates Java code from your database and lets you build type safe SQL queries through its fluent API.") 可以用来帮助构建 SQL 语句，忽略不同 SQL 方言的存在。
+
+在 [Maven](https://maven.apache.org/) 中使用 [jOOQ](https://www.jooq.org/ "jOOQ generates Java code from your database and lets you build type safe SQL queries through its fluent API.")，需要在 `pom.xml` 文件中添加以下依赖：
+
+```plain
+<
+dependency
+>    <
+groupId
+>
+org.jooq
+</
+groupId
+>    <
+artifactId
+>
+jooq
+</
+artifactId
+>    <
+version
+>
+${jooq_version}
+</
+version
+></
+dependency
+>
+```
+
+截至 2019-10-21，[jOOQ](https://www.jooq.org/ "jOOQ generates Java code from your database and lets you build type safe SQL queries through its fluent API.") 的最新版本是 `3.12.1` 。
+
+以下所有的 SQL 生成用例都使用了 [JUnit 5](https://junit.org/junit5/) 的参数化测试能力，参数化的数据为 6 种不同的关系型数据库方言。
+
+公共代码：
+
+```plain
+// junit 5 parameterized test data source
+static 
+Stream
+<
+Arguments
+> 
+dslContexts() 
+{    
+return 
+Stream
+.
+of(        
+Arguments
+.of(
+SQLDialect
+.DEFAULT),        
+Arguments
+.of(
+SQLDialect
+.H2),        
+Arguments
+.of(
+SQLDialect
+.HSQLDB),        
+Arguments
+.of(
+SQLDialect
+.POSTGRES),        
+Arguments
+.of(
+SQLDialect
+.MYSQL)    )
+;}
+```
+
+# [🔗](#create-table)create table
+
+使用 [jOOQ](https://www.jooq.org/ "jOOQ generates Java code from your database and lets you build type safe SQL queries through its fluent API.") 来生成 `create table` 的 SQL：
+
+```plain
+@
+ParameterizedTest
+@
+MethodSource
+(
+"dslContexts"
+)void 
+test_buildCreateTable(final 
+SQLDialect
+ dialect) 
+{    
+final 
+DSLContext
+ dsl 
+= 
+DSL
+.
+using(dialect)
+;    
+final 
+String
+ sql 
+=
+ dsl        .
+createTable(
+"user"
+)        
+.
+column(
+"id"
+,            
+DefaultDataType
+.getDataType(dialect, 
+Long
+.class)                .identity(
+true
+)                .nullable(
+false
+))        
+.
+column(
+"name"
+,            
+DefaultDataType
+.getDataType(dialect, 
+String
+.class)                .nullable(
+false
+)                .length(
+100
+))        
+.
+column(
+"created_at"
+,            
+DefaultDataType
+.getDataType(dialect, 
+LocalDateTime
+.class)                .nullable(
+false
+))        
+.
+constraint(DSL.primaryKey(
+"id"
+))        
+.
+getSQL(
+ParamType
+.INLINED)
+;    
+System
+.out.
+println(dialect.getName() 
++ 
+" => " 
++
+ sql)
+;}
+```
+
+生成的 `create table` 语句简单对比如下：
+
+*   [SQL:1999](https://en.wikipedia.org/wiki/SQL:1999 "SQL:1999")
+    
+    ```plain
+    create table
+     "
+    user
+    "(
+        
+    "id" 
+    bigint not null
+    ,
+        
+    "name" 
+    varchar
+    (
+    100
+    ) 
+    not null
+    ,
+        
+    "created_at" 
+    timestamp not null
+    ,
+        
+    primary key
+     (
+    "id"
+    )
+    )
+    ```
+    
+*   [H2](http://www.h2database.com/html/main.html "H2 Database Engine")
+    
+    ```plain
+    create table
+     "
+    user
+    "(
+        
+    "id" 
+    bigint not null
+     auto_increment,
+        
+    "name" 
+    varchar
+    (
+    100
+    ) 
+    not null
+    ,
+        
+    "created_at" 
+    timestamp not null
+    ,
+        
+    primary key
+     (
+    "id"
+    )
+    )
+    ```
+    
+*   [HSQLDB](http://hsqldb.org/ "HSQLDB - 100% Java Database")
+    
+    ```plain
+    create table
+     "
+    user
+    "(
+        
+    "id" 
+    bigint
+     generated by 
+    default as
+     identity(start 
+    with 
+    1
+    ) 
+    not null
+    ,
+        
+    "name" 
+    varchar
+    (
+    100
+    ) 
+    not null
+    ,
+        
+    "created_at" 
+    timestamp not null
+    ,
+        
+    primary key
+     (
+    "id"
+    )
+    )
+    ```
+    
+*   [MySQL](http://www.mysql.com/ "The world's most popular open source database")
+    
+    ```plain
+    create table
+     `
+    user
+    `(
+        
+    `id` 
+    bigint not null
+     auto_increment,
+        
+    `name` 
+    varchar
+    (
+    100
+    ) 
+    not null
+    ,
+        
+    `created_at` 
+    timestamp not null
+    ,
+        
+    primary key
+     (
+    `id`
+    )
+    )
+    ```
+    
+*   [Postgres](https://www.postgresql.org/ "PostgreSQL: The World's Most Advanced Open Source Relational Database")
+    
+    ```plain
+    create table
+     "
+    user
+    "(
+        
+    "id"
+     serial8 
+    not null
+    ,
+        
+    "name" 
+    varchar
+    (
+    100
+    ) 
+    not null
+    ,
+        
+    "created_at" 
+    timestamp not null
+    ,
+        
+    primary key
+     (
+    "id"
+    )
+    )
+    ```
+    
+
+# [🔗](#select)select
+
+使用 [jOOQ](https://www.jooq.org/ "jOOQ generates Java code from your database and lets you build type safe SQL queries through its fluent API.") 来生成 `select` 的 SQL：
+
+```plain
+@
+ParameterizedTest
+@
+MethodSource
+(
+"dslContexts"
+)void 
+test_buildSelect(final 
+SQLDialect
+ dialect) 
+{    
+final 
+DSLContext
+ dsl 
+= 
+DSL
+.
+using(dialect)
+;    
+final 
+String
+ sql 
+=
+ dsl        .
+select(DSL.field(
+"u.id"
+), DSL.field(
+"u.name"
+), DSL.field(
+"b.book_name"
+))        
+.
+from(DSL.table(
+"user"
+).as(
+"u"
+))        
+.
+join(DSL.table(
+"book"
+).as(
+"b"
+))        
+.
+on(DSL.field(
+"u.id"
+).eq(DSL.field(
+"b.author_id"
+)))        
+.
+where(DSL.field(
+"u.name"
+).eq(
+"Elvis Wang"
+))        
+.
+getSQL(
+ParamType
+.INLINED)
+;    
+System
+.out.
+println(dialect.getName() 
++ 
+" => " 
++
+ sql)
+;}
+```
+
+生成的 `select` 语句简单对比如下：
+
+*   [SQL:1999](https://en.wikipedia.org/wiki/SQL:1999 "SQL:1999")
+    
+    ```plain
+    select 
+    u
+    .
+    id
+    , 
+    u
+    .
+    name
+    , 
+    b
+    .
+    book_name
+        
+    from
+     user 
+    "u"
+        
+    join
+     book 
+    "b"
+        
+    on 
+    u
+    .
+    id 
+    = 
+    b
+    .
+    author_id
+        
+    where 
+    u
+    .
+    name 
+    = 
+    'Elvis Wang'
+    ```
+    
+*   [H2](http://www.h2database.com/html/main.html "H2 Database Engine")
+    
+    ```plain
+    select 
+    u
+    .
+    id
+    , 
+    u
+    .
+    name
+    , 
+    b
+    .
+    book_name
+        
+    from
+     user 
+    "u"
+        
+    join
+     book 
+    "b"
+        
+    on 
+    u
+    .
+    id 
+    = 
+    b
+    .
+    author_id
+        
+    where 
+    u
+    .
+    name 
+    = 
+    'Elvis Wang'
+    ```
+    
+*   [HSQLDB](http://hsqldb.org/ "HSQLDB - 100% Java Database")
+    
+    ```plain
+    select 
+    u
+    .
+    id
+    , 
+    u
+    .
+    name
+    , 
+    b
+    .
+    book_name
+        
+    from
+     user 
+    as 
+    "u"
+        
+    join
+     book 
+    as 
+    "b"
+        
+    on 
+    u
+    .
+    id 
+    = 
+    b
+    .
+    author_id
+        
+    where 
+    u
+    .
+    name 
+    = 
+    'Elvis Wang'
+    ```
+    
+*   [MySQL](http://www.mysql.com/ "The world's most popular open source database")
+    
+    ```plain
+    select 
+    u
+    .
+    id
+    , 
+    u
+    .
+    name
+    , 
+    b
+    .
+    book_name
+        
+    from
+     user 
+    as
+     \
+    `u\`
+        join book as \`b\`
+        on u.id = b.author_id
+        where u.name = 'Elvis Wang'
+    ```
+    
+*   [Postgres](https://www.postgresql.org/ "PostgreSQL: The World's Most Advanced Open Source Relational Database")
+    
+    ```plain
+    select 
+    u
+    .
+    id
+    , 
+    u
+    .
+    name
+    , 
+    b
+    .
+    book_name
+        
+    from
+     user 
+    as 
+    "u"
+        
+    join
+     book 
+    as 
+    "b"
+        
+    on 
+    u
+    .
+    id 
+    = 
+    b
+    .
+    author_id
+        
+    where 
+    u
+    .
+    name 
+    = 
+    'Elvis Wang'
+    ```
+    
+
+# [🔗](#insert)insert
+
+使用 [jOOQ](https://www.jooq.org/ "jOOQ generates Java code from your database and lets you build type safe SQL queries through its fluent API.") 来生成 `insert` 的 SQL：
+
+```plain
+@
+ParameterizedTest
+@
+MethodSource
+(
+"dslContexts"
+)void 
+test_buildInsert(final 
+SQLDialect
+ dialect) 
+{    
+final 
+DSLContext
+ dsl 
+= 
+DSL
+.
+using(dialect)
+;    
+final 
+String
+ sql 
+=
+ dsl        .
+insertInto(DSL.table(
+"user"
+))        
+.
+columns(DSL.field(
+"name"
+), DSL.field(
+"created_at"
+))        
+.
+values(DSL.value(
+"Elvis Wang"
+), DSL.value(
+LocalDateTime
+.now()))        
+.
+getSQL(
+ParamType
+.INLINED)
+;    
+System
+.out.
+println(dialect.getName() 
++ 
+" => " 
++
+ sql)
+;}
+```
+
+生成的 `insert` 语句简单对比如下：
+
+*   [SQL:1999](https://en.wikipedia.org/wiki/SQL:1999 "SQL:1999")
+    
+    ```plain
+    insert into
+     user (name, created_at)
+        
+    values
+     (
+            
+    'Elvis Wang'
+    ,
+            
+    timestamp 
+    '2019-10-17 18:28:29.305'
+        )
+    ```
+    
+*   [H2](http://www.h2database.com/html/main.html "H2 Database Engine")
+    
+    ```plain
+    insert into
+     user (name, created_at)
+        
+    values
+     (
+            
+    'Elvis Wang'
+    ,
+            
+    timestamp 
+    '2019-10-17 18:28:29.332'
+        )
+    ```
+    
+*   [HSQLDB](http://hsqldb.org/ "HSQLDB - 100% Java Database")
+    
+    ```plain
+    insert into
+     user (name, created_at)
+        
+    values
+     (
+            
+    'Elvis Wang'
+    ,
+            
+    timestamp 
+    '2019-10-17 18:28:29.335'
+        )
+    ```
+    
+*   [MySQL](http://www.mysql.com/ "The world's most popular open source database")
+    
+    ```plain
+    insert into
+     user (name, created_at)
+        
+    values
+     (
+            
+    'Elvis Wang'
+    ,
+            {ts 
+    '2019-10-17 18:28:29.338'
+    }
+        )
+    ```
+    
+*   [Postgres](https://www.postgresql.org/ "PostgreSQL: The World's Most Advanced Open Source Relational Database")
+    
+    ```plain
+    insert into
+     user (name, created_at)
+        
+    values
+     (
+            
+    'Elvis Wang'
+    ,
+            
+    timestamp 
+    '2019-10-17 18:28:29.341'
+        )
+    ```
+    
+
+# [🔗](#update)update
+
+使用 [jOOQ](https://www.jooq.org/ "jOOQ generates Java code from your database and lets you build type safe SQL queries through its fluent API.") 来生成 `update` 的 SQL：
+
+```plain
+@
+ParameterizedTest
+@
+MethodSource
+(
+"dslContexts"
+)void 
+test_buildUpdate(final 
+SQLDialect
+ dialect) 
+{    
+final 
+DSLContext
+ dsl 
+= 
+DSL
+.
+using(dialect)
+;    
+final 
+String
+ sql 
+=
+ dsl        .
+update(DSL.table(
+"user"
+))        
+.
+set(DSL.field(
+"name"
+), 
+"Elvis Wang"
+)        
+.
+set(DSL.field(
+"created_at"
+), 
+LocalDateTime
+.now())        
+.
+where(DSL.field(
+"id"
+).eq(
+1993
+L
+))        
+.
+getSQL(
+ParamType
+.INLINED)
+;    
+System
+.out.
+println(dialect.getName() 
++ 
+" => " 
++
+ sql)
+;}
+```
+
+生成的 `update` 语句简单对比如下：
+
+*   [SQL:1999](https://en.wikipedia.org/wiki/SQL:1999 "SQL:1999")
+    
+    ```plain
+    update
+     user
+        
+    set
+     name 
+    = 
+    'Elvis Wang'
+    ,
+            created_at 
+    = 
+    timestamp 
+    '2019-10-17 19:46:58.42'
+        
+    where
+     id 
+    = 
+    1993
+    ```
+    
+*   [H2](http://www.h2database.com/html/main.html "H2 Database Engine")
+    
+    ```plain
+    update
+     user
+        
+    set
+     name 
+    = 
+    'Elvis Wang'
+    ,
+            created_at 
+    = 
+    timestamp 
+    '2019-10-17 19:46:58.456'
+        
+    where
+     id 
+    = 
+    1993
+    ```
+    
+*   [HSQLDB](http://hsqldb.org/ "HSQLDB - 100% Java Database")
+    
+    ```plain
+    update
+     user
+        
+    set
+     name 
+    = 
+    'Elvis Wang'
+    ,
+            created_at 
+    = 
+    timestamp 
+    '2019-10-17 19:46:58.46'
+        
+    where
+     id 
+    = 
+    1993
+    ```
+    
+*   [MySQL](http://www.mysql.com/ "The world's most popular open source database")
+    
+    ```plain
+    update
+     user
+        
+    set
+     name 
+    = 
+    'Elvis Wang'
+    ,
+            created_at 
+    =
+     {ts 
+    '2019-10-17 19:46:58.462'
+    }
+        
+    where
+     id 
+    = 
+    1993
+    ```
+    
+*   [Postgres](https://www.postgresql.org/ "PostgreSQL: The World's Most Advanced Open Source Relational Database")
+    
+    ```plain
+    update
+     user
+        
+    set
+     name 
+    = 
+    'Elvis Wang'
+    ,
+            created_at 
+    = 
+    timestamp 
+    '2019-10-17 19:46:58.465'
+        
+    where
+     id 
+    = 
+    1993
+    ```
+    
+
+# [🔗](#delete)delete
+
+使用 [jOOQ](https://www.jooq.org/ "jOOQ generates Java code from your database and lets you build type safe SQL queries through its fluent API.") 来生成 `delete` 的 SQL：
+
+```plain
+@
+ParameterizedTest
+@
+MethodSource
+(
+"dslContexts"
+)void 
+test_buildDelete(final 
+SQLDialect
+ dialect) 
+{    
+final 
+DSLContext
+ dsl 
+= 
+DSL
+.
+using(dialect)
+;    
+final 
+String
+ sql 
+=
+ dsl        .
+delete(DSL.table(
+"user"
+))        
+.
+where(DSL.field(
+"id"
+).eq(
+1993
+L
+))        
+.
+getSQL(
+ParamType
+.INLINED)
+;    
+System
+.out.
+println(dialect.getName() 
++ 
+" => " 
++
+ sql)
+;}
+```
+
+生成的 `delete` 语句简单对比如下：
+
+*   [SQL:1999](https://en.wikipedia.org/wiki/SQL:1999 "SQL:1999")
+    
+    ```plain
+    delete from
+     user 
+    where
+     id 
+    = 
+    1993
+    ```
+    
+*   [H2](http://www.h2database.com/html/main.html "H2 Database Engine")
+    
+    ```plain
+    delete from
+     user 
+    where
+     id 
+    = 
+    1993
+    ```
+    
+*   [HSQLDB](http://hsqldb.org/ "HSQLDB - 100% Java Database")
+    
+    ```plain
+    delete from
+     user 
+    where
+     id 
+    = 
+    1993
+    ```
+    
+*   [MySQL](http://www.mysql.com/ "The world's most popular open source database")
+    
+    ```plain
+    delete from
+     user 
+    where
+     id 
+    = 
+    1993
+    ```
+    
+*   [Postgres](https://www.postgresql.org/ "PostgreSQL: The World's Most Advanced Open Source Relational Database")
+    
+    ```plain
+    delete from
+     user 
+    where
+     id 
+    = 
+    1993
+    ```
+    
+
+* * *
+
+完整的示例代码可以参见 [jOOQ Usecases](https://github.com/wbprime/java-mods/tree/master/jooq-usecases) 。
+
+想了解更多的 [jOOQ](https://www.jooq.org/ "jOOQ generates Java code from your database and lets you build type safe SQL queries through its fluent API.") 用法，可以阅读 [官方文档](https://www.jooq.org/learn/ "jOOQ Documentation") 。
+
+* * *
+
+以上。
+
+[#jdbc](https://www.wangbo.im/tags/jdbc/) [#sql](https://www.wangbo.im/tags/sql/) [#jooq](https://www.wangbo.im/tags/jooq/)
+
+[‹ Mapper Classes Generated by MapStruct](https://www.wangbo.im/posts/mapstruct-usecases/) [JOOQ 的使用 - 执行 SQL 语句 (SQL Executor) ›](https://www.wangbo.im/posts/jooq-usecases-sql-executor/)
